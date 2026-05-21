@@ -100,6 +100,82 @@ ps | grep touch-bridge
 |------|-------------|
 | `touch-bridge.py` | Main bridge script — reads hidraw, writes uinput |
 | `rc.local` | Example startup script for `/data/rc.local` |
+| `hdmi-blank-watcher.sh` | Daemon that turns the HDMI display off/on in reaction to the GUI sleep button |
+| `install-hdmi-blank.sh` | One-shot installer for the sleep-button shim |
+
+---
+
+## Bonus: making the GUI sleep button work on HDMI
+
+### Problem
+
+The Victron Qt6 GUI (`venus-gui-v2`) shows a moon-and-zZ button in the top
+right of the status bar on the Brief page. Tapping it calls
+`ScreenBlanker.setDisplayOff()`, which writes `1` to the file pointed to by
+`/etc/venus/blank_display_device`. On a Cerbo GX with the built-in screen
+that path is a backlight sysfs node, so the kernel turns the panel off. On
+an HDMI display the path is missing or non-functional, so the button does
+nothing visible.
+
+### Solution
+
+1. Replace `/etc/venus/blank_display_device` with a plain shadow file
+   (`/data/screen-blank/state`) so writes from the GUI succeed.
+2. Run a small watcher daemon that reacts to changes in that file and
+   toggles the HDMI output via DRM DPMS (preferred) or `fb0/blank`
+   (fallback). Touch keeps working while the screen is off, and any touch
+   wakes the GUI back up because `ScreenBlanker` writes `0` to the file on
+   the next input event.
+
+### Install
+
+Copy the two new files to the Cerbo GX:
+
+```sh
+scp hdmi-blank-watcher.sh install-hdmi-blank.sh root@<cerbo-ip>:/data/
+ssh root@<cerbo-ip> "sh /data/install-hdmi-blank.sh"
+```
+
+The installer:
+
+- creates `/data/screen-blank/state`
+- backs up the original `/etc/venus/blank_display_device` to
+  `/data/blank_display_device.orig` (only on first run)
+- points the GUI at the shadow file
+- adds `/data/hdmi-blank-watcher.sh &` to `/data/rc.local`
+- restarts the GUI service so it picks up the new path
+
+After the GUI restarts, tap the moon icon on the Brief page — HDMI should
+go to standby. Any touch wakes it up.
+
+### Troubleshooting
+
+Watch the daemon's log:
+
+```sh
+tail -f /var/log/hdmi-blank-watcher.log
+```
+
+Check the GUI is reading the shadow file:
+
+```sh
+cat /etc/venus/blank_display_device   # should print /data/screen-blank/state
+cat /data/screen-blank/state          # 0 = on, 1 = off
+```
+
+If neither DPMS nor `fb0/blank` blanks the display, the watcher logs a
+warning — the BSP may not expose either control. In that case the
+practical fallback is to drive the `Display off time` setting in the GUI's
+display settings to dim the rendered content instead.
+
+### Revert
+
+```sh
+cat /data/blank_display_device.orig > /etc/venus/blank_display_device
+pkill -f hdmi-blank-watcher.sh
+# remove the watcher line from /data/rc.local manually
+svc -t /service/gui-v2
+```
 
 ---
 

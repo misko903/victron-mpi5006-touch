@@ -15,3 +15,6 @@ while [ $i -lt 30 ] && [ ! -e /dev/hidraw0 ]; do
 done
 
 python3 /data/touch-bridge.py &
+
+# HDMI blank watcher (display sleep button)
+/data/hdmi-blank-watcher.sh &
