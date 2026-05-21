@@ -54,6 +54,9 @@ SYN_REPORT = 0
 X_MAX = 800
 Y_MAX = 480
 
+# Rotation: 0 = normal, 180 = upside-down
+ROTATION = 0
+
 # HID report offsets for Finger 1 (Report ID 1)
 # Byte 0: Report ID (0x01)
 # Byte 1: Tip Switch (bit 0) | padding (bits 1-7)
@@ -142,12 +145,14 @@ def main():
         y   = struct.unpack_from('<H', data, OFF_Y)[0]
 
         if tip or prev_tip != tip:
-            emit(ufd, EV_ABS, ABS_X, x)
-            emit(ufd, EV_ABS, ABS_Y, y)
+            tx = (X_MAX - x) if ROTATION == 180 else x
+            ty = (Y_MAX - y) if ROTATION == 180 else y
+            emit(ufd, EV_ABS, ABS_X, tx)
+            emit(ufd, EV_ABS, ABS_Y, ty)
             emit(ufd, EV_KEY, BTN_TOUCH, tip)
             emit(ufd, EV_SYN, SYN_REPORT, 0)
             if tip:
-                print(f"[touch-bridge] touch x={x} y={y}")
+                print(f"[touch-bridge] touch x={tx} y={ty}")
 
         prev_tip = tip
 
