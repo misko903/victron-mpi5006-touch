@@ -1,0 +1,17 @@
+#!/bin/sh
+# /data/rc.local — startup script for Venus OS (Victron Cerbo GX)
+#
+# Venus OS runs this file at boot via /etc/init.d/custom-rc-late.sh
+# if the file exists and is executable (chmod +x /data/rc.local).
+#
+# This script waits for the USB touch device to appear, then starts
+# the touch bridge in the background.
+
+# Wait up to 30 seconds for the USB touch device to appear
+i=0
+while [ $i -lt 30 ] && [ ! -e /dev/hidraw0 ]; do
+    sleep 1
+    i=$((i+1))
+done
+
+python3 /data/touch-bridge.py &
