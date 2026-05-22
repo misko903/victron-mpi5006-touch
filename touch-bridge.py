@@ -112,49 +112,76 @@ def create_uinput(ufd):
 def main():
     print(f"[touch-bridge] starting (long_size={LONG_SIZE})")
 
-    # Grab the original device to prevent Qt6 from receiving broken coords
-    evfd = open('/dev/input/event2', 'rb', buffering=0)
-    fcntl.ioctl(evfd, EVIOCGRAB, 1)
-    print("[touch-bridge] grabbed /dev/input/event2")
-
-    # Create virtual uinput touchscreen
+    # Create virtual uinput touchscreen once — survives USB reconnects
     ufd = open('/dev/uinput', 'wb', buffering=0)
     create_uinput(ufd)
     time.sleep(1)
     print("[touch-bridge] uinput device created")
 
-    # Open raw HID device
-    hfd = open('/dev/hidraw0', 'rb', buffering=0)
-    print("[touch-bridge] ready")
-
-    prev_tip = 0
     while True:
+        # Wait for the HID device to appear (initial boot or USB reconnect)
+        while not os.path.exists('/dev/hidraw0'):
+            time.sleep(1)
+        while not os.path.exists('/dev/input/event2'):
+            time.sleep(1)
+
+        evfd = None
+        hfd  = None
         try:
-            data = hfd.read(REPORT_SIZE)
+            # Grab the original device to prevent Qt6 from receiving broken coords
+            evfd = open('/dev/input/event2', 'rb', buffering=0)
+            fcntl.ioctl(evfd, EVIOCGRAB, 1)
+            print("[touch-bridge] grabbed /dev/input/event2")
+
+            # Open raw HID device
+            hfd = open('/dev/hidraw0', 'rb', buffering=0)
+            print("[touch-bridge] ready")
+
+            prev_tip = 0
+            while True:
+                try:
+                    data = hfd.read(REPORT_SIZE)
+                except OSError as e:
+                    print(f"[touch-bridge] device disconnected: {e}", file=sys.stderr)
+                    break
+
+                if not data or len(data) < 7:
+                    continue
+                if data[0] != REPORT_ID:
+                    continue
+
+                tip = data[OFF_TIP] & 0x01
+                x   = struct.unpack_from('<H', data, OFF_X)[0]
+                y   = struct.unpack_from('<H', data, OFF_Y)[0]
+
+                if tip or prev_tip != tip:
+                    tx = (X_MAX - x) if ROTATION == 180 else x
+                    ty = (Y_MAX - y) if ROTATION == 180 else y
+                    emit(ufd, EV_ABS, ABS_X, tx)
+                    emit(ufd, EV_ABS, ABS_Y, ty)
+                    emit(ufd, EV_KEY, BTN_TOUCH, tip)
+                    emit(ufd, EV_SYN, SYN_REPORT, 0)
+                    if tip:
+                        print(f"[touch-bridge] touch x={tx} y={ty}")
+
+                prev_tip = tip
+
         except OSError as e:
-            print(f"[touch-bridge] read error: {e}", file=sys.stderr)
-            break
+            print(f"[touch-bridge] open error: {e}", file=sys.stderr)
+        finally:
+            if hfd:
+                try:
+                    hfd.close()
+                except OSError:
+                    pass
+            if evfd:
+                try:
+                    evfd.close()
+                except OSError:
+                    pass
 
-        if not data or len(data) < 7:
-            continue
-        if data[0] != REPORT_ID:
-            continue
-
-        tip = data[OFF_TIP] & 0x01
-        x   = struct.unpack_from('<H', data, OFF_X)[0]
-        y   = struct.unpack_from('<H', data, OFF_Y)[0]
-
-        if tip or prev_tip != tip:
-            tx = (X_MAX - x) if ROTATION == 180 else x
-            ty = (Y_MAX - y) if ROTATION == 180 else y
-            emit(ufd, EV_ABS, ABS_X, tx)
-            emit(ufd, EV_ABS, ABS_Y, ty)
-            emit(ufd, EV_KEY, BTN_TOUCH, tip)
-            emit(ufd, EV_SYN, SYN_REPORT, 0)
-            if tip:
-                print(f"[touch-bridge] touch x={tx} y={ty}")
-
-        prev_tip = tip
+        print("[touch-bridge] waiting for device to reconnect...")
+        time.sleep(2)
 
 
 if __name__ == '__main__':
