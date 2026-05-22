@@ -1,25 +1,24 @@
 # QDtech MPI5006 Touch Fix for Victron Cerbo GX (Venus OS)
 
-Fixes touch input for the **QDtech MPI5001 / MPI5006** 5-inch HDMI touchscreen on a **Victron Cerbo GX** running Venus OS with the Qt6-based GUI (venus-gui-v2).
+Fixes touch input — and the Brief-page sleep button — for the **QDtech MPI5001 / MPI5006** 5-inch HDMI touchscreen on a **Victron Cerbo GX** running Venus OS with the Qt6-based GUI (venus-gui-v2).
 
 ---
 
-## Problem
+## Problem 1: touch lands at the bottom-right corner
 
-The display image works over HDMI, but touch does not respond — or all touches appear stuck at the bottom-right corner of the screen.
+The display image works over HDMI, but touch does not respond — or every touch appears stuck at the bottom-right corner of the screen.
 
-**Root cause:** The `hid-generic` kernel driver maps `ABS_X`/`ABS_Y` from the last finger slot in the HID descriptor (Finger 3), which is always inactive and always reports maximum coordinates (800, 480). This causes every touch event to land at the bottom-right corner regardless of where you actually touch.
+**Root cause:** The `hid-generic` kernel driver maps `ABS_X`/`ABS_Y` from the last finger slot in the HID descriptor (Finger 3), which is always inactive and always reports the maximum coordinates (800, 480).
 
----
+**Solution:** `touch-bridge.py` grabs `/dev/input/event2` exclusively, reads raw HID reports from `/dev/hidraw0`, parses Finger 1's correct X/Y coordinates, and forwards them through a uinput virtual touchscreen named "MPI5001 Touch Bridge".
 
-## Solution
+## Problem 2: the moon/zZ sleep button does nothing
 
-A Python bridge script (`touch-bridge.py`) that:
+The Victron GUI shows a moon-and-zZ button in the top-right of the status bar on the Brief page. Tapping it calls `ScreenBlanker.setDisplayOff()`, which writes `1` to the file pointed at by `/etc/venus/blank_display_device`. On a Cerbo with a built-in panel that path is a backlight sysfs node; on HDMI it's missing or non-functional, so the button does nothing.
 
-1. **Grabs** `/dev/input/event2` exclusively — prevents Qt6 from receiving the broken coordinates
-2. **Reads** raw HID reports from `/dev/hidraw0`
-3. **Parses** Finger 1's correct X/Y coordinates
-4. **Forwards** correct events via a `uinput` virtual touchscreen device that Qt6 auto-discovers
+**Solution:** [ldenisey/venus-os-configuration](https://github.com/ldenisey/venus-os-configuration)'s `blank-display-device` package, plus a small patch to make it discover the touch-bridge by sysfs name (because Venus OS does not tag input devices with `ID_INPUT_TOUCHSCREEN=1`, so the package's default auto-detect can't find anything).
+
+The package's daemon turns HDMI off via `/sys/class/drm/card0-HDMI-A-1/status` and — crucially — once blanked it stops listening to anything the GUI writes and only wakes up on a real `access` event on the touchscreen input device. That breaks the auto-blank-then-immediately-wake-up cycle that Qt6/EGLFS would otherwise produce.
 
 ---
 
@@ -36,60 +35,63 @@ A Python bridge script (`touch-bridge.py`) that:
 
 ## Installation
 
-### 1. Copy the bridge script to the Cerbo GX
+### 1. Copy files to the Cerbo GX
 
-Connect to your Cerbo GX via SSH (root, no password by default on Venus OS):
+SSH in as root (no password by default on Venus OS):
 
 ```sh
+scp touch-bridge.py rc.local install-sleep-button.sh root@<cerbo-ip>:/data/
 ssh root@<cerbo-ip>
 ```
 
-Copy `touch-bridge.py` to `/data/` (this partition survives firmware updates):
+Or paste them with `cat > /data/<file> << 'EOF' ... EOF` if scp is inconvenient.
+
+### 2. Make the boot script executable
 
 ```sh
-# From your PC (adjust IP):
-scp touch-bridge.py root@<cerbo-ip>:/data/touch-bridge.py
-```
-
-Or paste the contents directly using `cat`:
-
-```sh
-cat > /data/touch-bridge.py << 'EOF'
-<paste touch-bridge.py contents here>
-EOF
-```
-
-### 2. Create the startup script
-
-Create `/data/rc.local` — Venus OS runs this automatically at boot if it is executable:
-
-```sh
-cat > /data/rc.local << 'EOF'
-#!/bin/sh
-# Wait up to 30 seconds for the USB touch device to appear
-i=0
-while [ $i -lt 30 ] && [ ! -e /dev/hidraw0 ]; do
-    sleep 1
-    i=$((i+1))
-done
-python3 /data/touch-bridge.py &
-EOF
-
 chmod +x /data/rc.local
 ```
 
-> **How it works:** `/etc/init.d/custom-rc-late.sh` (built into Venus OS) runs `/data/rc.local` at startup if the file is executable. The `/data/` partition persists across reboots and firmware updates.
+`/etc/init.d/custom-rc-late.sh` (built into Venus OS) runs `/data/rc.local` at startup if it's executable. The `/data/` partition persists across reboots and firmware updates.
 
-### 3. Reboot
+### 3. Install the sleep-button package
+
+```sh
+sh /data/install-sleep-button.sh
+```
+
+This:
+
+- installs `blank-display-device` from ldenisey's feed
+- patches `/opt/victronenergy/blank-display-device/blank-display-device.sh` to find the touch-bridge by sysfs name
+- installs `mod-persist` and registers `blank-display-device` so it survives Venus OS firmware updates
+- restarts the daemon and the GUI
+
+### 4. Reboot
 
 ```sh
 reboot
 ```
 
-After reboot, touch should work automatically. You can verify with:
+After reboot:
+
+- touch should work everywhere in the GUI
+- the moon icon on the Brief page should blank the HDMI output
+- any tap on the (black) screen wakes it back up
+
+Verify the touch bridge:
 
 ```sh
 ps | grep touch-bridge
+```
+
+Verify the sleep daemon:
+
+```sh
+tail -n 10 /var/log/blank-display-device/current
+# should end with:
+#   HDMI: /sys/class/drm/card0-HDMI-A-1/status
+#   Touch: /dev/input/event3
 ```
 
 ---
@@ -98,124 +100,64 @@ ps | grep touch-bridge
 
 | File | Description |
 |------|-------------|
-| `touch-bridge.py` | Main bridge script — reads hidraw, writes uinput |
-| `rc.local` | Example startup script for `/data/rc.local` |
-| `hdmi-blank-watcher.sh` | Daemon that turns the HDMI display off/on in reaction to the GUI sleep button |
-| `install-hdmi-blank.sh` | One-shot installer for the sleep-button shim |
+| `touch-bridge.py` | hidraw → uinput touch bridge (grabs `/dev/input/event2`, emits correct coords) |
+| `rc.local` | `/data/rc.local`: starts the touch bridge at boot **and** re-applies the daemon patch if a firmware update has reverted it |
+| `install-sleep-button.sh` | one-shot installer for the sleep-button shim |
 
 ---
 
-## Bonus: making the GUI sleep button work on HDMI
+## Surviving firmware updates
 
-### Problem
+`mod-persist` re-installs the `.ipk` packages after each Venus OS firmware update. But the patched daemon script (`/opt/victronenergy/blank-display-device/blank-display-device.sh`) is restored to its upstream version, which can't find the touchscreen on Venus OS.
 
-The Victron Qt6 GUI (`venus-gui-v2`) shows a moon-and-zZ button in the top
-right of the status bar on the Brief page. Tapping it calls
-`ScreenBlanker.setDisplayOff()`, which writes `1` to the file pointed to by
-`/etc/venus/blank_display_device`. On a Cerbo GX with the built-in screen
-that path is a backlight sysfs node, so the kernel turns the panel off. On
-an HDMI display the path is missing or non-functional, so the button does
-nothing visible.
-
-### Solution
-
-1. Replace `/etc/venus/blank_display_device` with a plain shadow file
-   (`/data/screen-blank/state`) so writes from the GUI succeed.
-2. Run a small watcher daemon that reacts to changes in that file and
-   toggles the HDMI output via DRM DPMS (preferred) or `fb0/blank`
-   (fallback). Touch keeps working while the screen is off, and any touch
-   wakes the GUI back up because `ScreenBlanker` writes `0` to the file on
-   the next input event.
-
-### Install
-
-Copy the two new files to the Cerbo GX:
-
-```sh
-scp hdmi-blank-watcher.sh install-hdmi-blank.sh root@<cerbo-ip>:/data/
-ssh root@<cerbo-ip> "sh /data/install-hdmi-blank.sh"
-```
-
-The installer:
-
-- creates `/data/screen-blank/state`
-- backs up the original `/etc/venus/blank_display_device` to
-  `/data/blank_display_device.orig` (only on first run)
-- points the GUI at the shadow file
-- adds `/data/hdmi-blank-watcher.sh &` to `/data/rc.local`
-- restarts the GUI service so it picks up the new path
-
-After the GUI restarts, tap the moon icon on the Brief page — HDMI should
-go to standby. Any touch wakes it up.
-
-### Troubleshooting
-
-Watch the daemon's log:
-
-```sh
-tail -f /var/log/hdmi-blank-watcher.log
-```
-
-Check the GUI is reading the shadow file:
-
-```sh
-cat /etc/venus/blank_display_device   # should print /data/screen-blank/state
-cat /data/screen-blank/state          # 0 = on, 1 = off
-```
-
-If neither DPMS nor `fb0/blank` blanks the display, the watcher logs a
-warning — the BSP may not expose either control. In that case the
-practical fallback is to drive the `Display off time` setting in the GUI's
-display settings to dim the rendered content instead.
-
-### Revert
-
-```sh
-cat /data/blank_display_device.orig > /etc/venus/blank_display_device
-pkill -f hdmi-blank-watcher.sh
-# remove the watcher line from /data/rc.local manually
-svc -t /service/gui-v2
-```
+`rc.local` handles this: on every boot it checks whether the script already contains the string `MPI5001 Touch Bridge`. If not, it rewrites it with the sysfs-lookup version and bounces the service.
 
 ---
 
 ## Troubleshooting
 
-**Touch still not working after reboot**
+### Touch doesn't work after reboot
 
-Check if the bridge is running:
 ```sh
-ps | grep touch-bridge
+ps | grep touch-bridge        # the python process should be running
+ls -la /data/rc.local         # must be executable
+cat /proc/bus/input/devices   # event3 should be "MPI5001 Touch Bridge"
 ```
 
-Check if `/data/rc.local` is executable:
+### Sleep button does nothing
+
 ```sh
-ls -la /data/rc.local
+cat /etc/venus/blank_display_device          # should print /etc/venus/blank_display_device.value
+cat /etc/venus/blank_display_device.value    # 0 = on, 1 = off
+
+# Daemon log (daemontools tai64n timestamps; pipe through tai64nlocal for readable times)
+tail -n 30 /var/log/blank-display-device/current
 ```
 
-If not executable:
+If the daemon log ends with `Error: ... not found`, the touch bridge wasn't running yet when the daemon started. Re-apply rc.local's restart logic by hand:
+
 ```sh
-chmod +x /data/rc.local
+svc -u /service/blank-display-device
 ```
 
-**Wrong device nodes**
+### Display turns itself back on right after blanking
 
-If your system uses a different event or hidraw node, check:
+This was the original symptom of the naive "watcher writes to fb0/blank" approach — Qt6/EGLFS takes precedence over fbdev, and ScreenBlanker auto-wakes on any input event from the disconnect. The ldenisey daemon avoids this by ignoring everything the GUI writes once it has blanked the screen; it only unblanks on a real `inotifywait -e access` on the touchscreen device. If you see cycling, your daemon is either unpatched (running the upstream `udevadm`-based detection that finds nothing) or watching the wrong input device.
+
+### Wrong device nodes
+
+If your hardware exposes the touch at a different `event*` / `hidraw*` node:
+
 ```sh
-ls /dev/input/
-ls /dev/hidraw*
+ls /dev/input/ /dev/hidraw*
 cat /proc/bus/input/devices
 ```
 
-Adjust `event2` and `hidraw0` in `touch-bridge.py` accordingly.
-
-**Venus OS firmware update**
-
-The `/data/` partition persists across firmware updates, so `touch-bridge.py` and `rc.local` survive updates automatically.
+Adjust `event2` / `hidraw0` in `touch-bridge.py`. The patched daemon finds the bridge by sysfs name ("MPI5001 Touch Bridge"), so it doesn't need adjusting.
 
 ---
 
-## How It Works (Technical Details)
+## How the touch bridge works
 
 The QDtech MPI5006 uses a Windows 7 multitouch HID protocol with 3 finger slots. The HID report structure (Report ID `0x01`) is:
 
@@ -230,7 +172,17 @@ The QDtech MPI5006 uses a Windows 7 multitouch HID protocol with 3 finger slots.
 | 11–20 | Finger 2 (same structure) |
 | 21–30 | Finger 3 (same structure) |
 
-The `hid-generic` driver only exposes `ABS_X`/`ABS_Y` from Finger 3 (the last slot), which is never active and always holds the maximum value. This bridge reads Finger 1 directly from the raw HID report.
+The `hid-generic` driver only exposes `ABS_X`/`ABS_Y` from Finger 3 (the last slot), which is never active and always holds the maximum value. The bridge reads Finger 1 directly from the raw HID report.
+
+---
+
+## How the sleep button works
+
+`venus-gui-v2`'s `ScreenBlanker` singleton reads the path from `/etc/venus/blank_display_device` at startup and just writes `1`/`0` into whatever file that points at; the button is visible only when the path is non-empty.
+
+`blank-display-device`'s postinst redirects that path at `/etc/venus/blank_display_device.value` (a plain shadow file) and runs a daemon that reacts to writes there. On Cerbo GX the daemon uses `/sys/class/drm/card0-HDMI-A-1/status` (`echo off` / `echo on`) — the only writable file on that connector under `imx-drm` (DPMS is read-only and `force` doesn't exist).
+
+The daemon's key trick is that after blanking it stops listening to the value file and only wakes on `inotifywait -e access` on the touchscreen device — so the GUI's eventual `setDisplayOn` writes are ignored and the display stays off until you actually touch the screen.
 
 ---
 
