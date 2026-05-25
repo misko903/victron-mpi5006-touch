@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# MpiTouchBridge — SetupHelper install/uninstall script
+# QDtech MPI5001/MPI5006 touch bridge for Victron Cerbo GX (Venus OS)
+#
+# Installs a runit service that:
+#   - locates the touch device dynamically by USB VID:PID
+#   - grabs the event node so Qt6 never sees broken coordinates
+#   - forwards correct coordinates via a uinput virtual touchscreen
+#   - restarts automatically on USB disconnect/reconnect or crash
+
+source "/data/SetupHelper/HelperResources/IncludeHelpers"
+
+packageName="MpiTouchBridge"
+
+case $scriptAction in
+
+    INSTALL)
+        logMessage "installing $packageName touch bridge service"
+        ;;
+
+    UNINSTALL)
+        logMessage "uninstalling $packageName touch bridge service"
+        ;;
+
+esac
+
+endScript INSTALL_SERVICE

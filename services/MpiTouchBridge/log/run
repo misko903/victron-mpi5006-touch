@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/multilog s10000 n5 /var/log/MpiTouchBridge
