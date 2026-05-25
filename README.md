@@ -1,5 +1,19 @@
 # QDtech MPI5006 Touch Fix for Victron Cerbo GX (Venus OS)
 
+> ### ⚡ Quick Install via SetupHelper Package Manager
+>
+> In the SetupHelper Package Manager, choose **Add Package** and enter:
+>
+> | Field | Value |
+> |-------|-------|
+> | **GitHub user** | `misko903` |
+> | **Package (repository)** | `victron-mpi5006-touch` |
+> | **Branch** | `setuphelper` |
+>
+> Then select the package from the list and choose **Install**.
+
+---
+
 Fixes touch input for the **QDtech MPI5001 / MPI5006** 5-inch HDMI touchscreen on a **Victron Cerbo GX** running Venus OS with the Qt6-based GUI (venus-gui-v2).
 
 This branch packages the fix as a proper **[SetupHelper](https://github.com/kwindrem/SetupHelper)** package — clean install/uninstall via the SetupHelper package manager, runit service with auto-restart, no `rc.local` hacks.
