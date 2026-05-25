@@ -122,9 +122,9 @@ def find_device_nodes(vendor=USB_VENDOR, product=USB_PRODUCT):
         hidraw_path = None
         for root, dirs, _ in os.walk(base):
             for d in dirs:
-                if event_path  is None and d.startswith('event'):
+                if event_path  is None and d.startswith('event')  and d[5:].isdigit():
                     event_path  = f'/dev/input/{d}'
-                if hidraw_path is None and d.startswith('hidraw'):
+                if hidraw_path is None and d.startswith('hidraw') and d[6:].isdigit():
                     hidraw_path = f'/dev/{d}'
             if event_path and hidraw_path:
                 break
