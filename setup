@@ -34,4 +34,4 @@ case $scriptAction in
 
 esac
 
-endScript INSTALL_SERVICE
+endScript INSTALL_SERVICES
