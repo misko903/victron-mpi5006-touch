@@ -17,6 +17,15 @@ case $scriptAction in
 
     INSTALL)
         logMessage "installing $packageName touch bridge service"
+
+        # Remove the legacy rc.local entry if present
+        if [ -f /data/rc.local ] && grep -q "touch-bridge.py" /data/rc.local; then
+            logMessage "removing legacy rc.local entry"
+            sed -i '/touch-bridge\.py/d' /data/rc.local
+        fi
+
+        # Kill any instance started by rc.local or manually
+        pkill -f "touch-bridge.py" 2>/dev/null || true
         ;;
 
     UNINSTALL)
