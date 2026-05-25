@@ -10,7 +10,7 @@ The display image works over HDMI, but touch does not respond — or every touch
 
 **Root cause:** The `hid-generic` kernel driver maps `ABS_X`/`ABS_Y` from the last finger slot in the HID descriptor (Finger 3), which is always inactive and always reports the maximum coordinates (800, 480).
 
-**Solution:** `touch-bridge.py` grabs `/dev/input/event2` exclusively, reads raw HID reports from `/dev/hidraw0`, parses Finger 1's correct X/Y coordinates, and forwards them through a uinput virtual touchscreen named "MPI5001 Touch Bridge".
+**Solution:** `touch-bridge.py` locates the device dynamically by USB VID:PID (`0484:5750`), grabs its event node exclusively, reads raw HID reports from its hidraw node, parses Finger 1's correct X/Y coordinates, and forwards them through a uinput virtual touchscreen named "MPI5001 Touch Bridge".
 
 ## Problem 2: the moon/zZ sleep button does nothing
 
@@ -100,7 +100,7 @@ tail -n 10 /var/log/blank-display-device/current
 
 | File | Description |
 |------|-------------|
-| `touch-bridge.py` | hidraw → uinput touch bridge (grabs `/dev/input/event2`, emits correct coords) |
+| `touch-bridge.py` | hidraw → uinput touch bridge — dynamic device discovery, USB reconnect, optional auto-blank |
 | `rc.local` | `/data/rc.local`: starts the touch bridge at boot **and** re-applies the daemon patch if a firmware update has reverted it |
 | `install-sleep-button.sh` | one-shot installer for the sleep-button shim |
 
@@ -146,14 +146,36 @@ This was the original symptom of the naive "watcher writes to fb0/blank" approac
 
 ### Wrong device nodes
 
-If your hardware exposes the touch at a different `event*` / `hidraw*` node:
+`touch-bridge.py` finds the correct `event*` and `hidraw*` nodes automatically by searching `/sys/bus/usb/devices/` for the device with VID:PID `0484:5750`. No manual adjustment needed — works even if node numbers change after reboot or if other USB devices are added.
+
+If the device is not found at all:
 
 ```sh
-ls /dev/input/ /dev/hidraw*
+ls /dev/hidraw*
 cat /proc/bus/input/devices
 ```
 
-Adjust `event2` / `hidraw0` in `touch-bridge.py`. The patched daemon finds the bridge by sysfs name ("MPI5001 Touch Bridge"), so it doesn't need adjusting.
+Verify the touch controller appears with VID `0484` / PID `5750`.
+
+### Auto-blank
+
+`BLANK_TIMEOUT` in `touch-bridge.py` controls how many seconds of inactivity trigger HDMI off. Default is `0` (disabled). To change:
+
+```sh
+# Enable 24-hour auto-blank:
+sed -i 's/BLANK_TIMEOUT = .*/BLANK_TIMEOUT = 24 * 3600/' /data/touch-bridge.py
+
+# Disable:
+sed -i 's/BLANK_TIMEOUT = .*/BLANK_TIMEOUT = 0/' /data/touch-bridge.py
+```
+
+Any touch wakes the display immediately.
+
+### Bridge log
+
+```sh
+tail -f /var/log/touch-bridge.log
+```
 
 ---
 
