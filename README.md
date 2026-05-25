@@ -42,7 +42,7 @@ SSH into your Cerbo GX and clone this branch into `/data/`:
 ```sh
 ssh root@<cerbo-ip>
 cd /data
-git clone -b mpi-touch https://github.com/misko903/victron-mpi5006-touch.git
+git clone -b setuphelper https://github.com/misko903/victron-mpi5006-touch.git
 ```
 
 ### 2. Install via SetupHelper
