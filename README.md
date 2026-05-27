@@ -18,6 +18,8 @@ Fixes touch input for the **QDtech MPI5001 / MPI5006** 5-inch HDMI touchscreen o
 
 This branch packages the fix as a proper **[SetupHelper](https://github.com/kwindrem/SetupHelper)** package — clean install/uninstall via the SetupHelper package manager, runit service with auto-restart, no `rc.local` hacks.
 
+Originally developed for a **Fiat Ducato camper van build** with the Cerbo GX mounted as a permanent panel display.
+
 > **Manual install (no SetupHelper)?** Switch to the [`main`](https://github.com/misko903/victron-mpi5006-touch/tree/main) branch.
 
 ---
@@ -40,7 +42,8 @@ The display image works over HDMI, but touch does not respond — or every touch
 | Touch controller | USB HID, VID:PID `0484:5750` |
 | System | Victron Cerbo GX, Venus OS ≥ 3.x (GUI v2 / Qt6) |
 | Connection | HDMI (video) + USB (touch) |
-| 3D printed case | [MakerWorld — 5-inch touch display MPI5006 QDtech](https://makerworld.com/en/models/2854959-5-inch-touch-display-mpi5006-qdtech#profileId-3185045) — attaches to the Cerbo GX with 3M VHB tape |
+| 3D printed case | [MakerWorld — 5-inch touch display MPI5006 QDtech](https://makerworld.com/en/models/2854959-5-inch-touch-display-mpi5006-qdtech#profileId-3185045) — attaches to a wall or car interior panel with 3M VHB tape |
+| Recommended cables | Flat HDMI and flat USB-C for clean routing in tight spaces |
 
 ---
 
