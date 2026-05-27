@@ -40,7 +40,7 @@ The display image works over HDMI, but touch does not respond — or every touch
 | Touch controller | USB HID, VID:PID `0484:5750` |
 | System | Victron Cerbo GX, Venus OS ≥ 3.x (GUI v2 / Qt6) |
 | Connection | HDMI (video) + USB (touch) |
-| 3D printed mount | [MakerWorld — 5-inch touch display MPI5006 QDtech](https://makerworld.com/en/models/2854959-5-inch-touch-display-mpi5006-qdtech#profileId-3185045) |
+| 3D printed case | [MakerWorld — 5-inch touch display MPI5006 QDtech](https://makerworld.com/en/models/2854959-5-inch-touch-display-mpi5006-qdtech#profileId-3185045) — attaches to the Cerbo GX with 3M VHB tape |
 
 ---
 
