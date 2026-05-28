@@ -9,7 +9,7 @@
 #   - forwards correct coordinates via a uinput virtual touchscreen
 #   - restarts automatically on USB disconnect/reconnect or crash
 
-packageName="MpiTouchBridge"
+packageName="victron-mpi5006-touch"
 
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
@@ -28,28 +28,14 @@ case $scriptAction in
             sed -i '/touch-bridge\.py/d' /data/rc.local
         fi
 
-        # Kill any instance started by rc.local or manually
+        # Kill any legacy instance started via rc.local (before SetupHelper)
         pkill -f "touch-bridge.py" 2>/dev/null || true
-
-        # Inject "Touch screen off" option into the display settings page
-        logMessage "patching PageSettingsDisplay.qml"
-        python3 /data/victron-mpi5006-touch/patch-qml.py patch
-
-        # Restart the GUI so the new menu item is visible immediately
-        svc -t /service/gui 2>/dev/null || true
         ;;
 
     UNINSTALL)
         logMessage "uninstalling $packageName touch bridge service"
-
-        # Restore original QML file
-        logMessage "restoring PageSettingsDisplay.qml"
-        python3 /data/victron-mpi5006-touch/patch-qml.py unpatch
-
-        # Restart the GUI
-        svc -t /service/gui 2>/dev/null || true
         ;;
 
 esac
 
-endScript INSTALL_SERVICES ADD_DBUS_SETTINGS
+endScript INSTALL_SERVICES
