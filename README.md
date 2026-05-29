@@ -30,6 +30,8 @@ The package's daemon turns HDMI off via `/sys/class/drm/card0-HDMI-A-1/status` a
 | Touch controller | USB HID, VID:PID `0484:5750` |
 | System | Victron Cerbo GX, Venus OS ≥ 3.x (GUI v2 / Qt6) |
 | Connection | HDMI (video) + USB (touch) |
+| 3D printed case | [MakerWorld — 5-inch touch display MPI5006 QDtech](https://makerworld.com/en/models/2854959-5-inch-touch-display-mpi5006-qdtech#profileId-3185045) — attaches to a wall or car interior panel with 3M VHB tape |
+| Recommended cables | Flat HDMI and flat USB-C for clean routing in tight spaces |
 
 ---
 
