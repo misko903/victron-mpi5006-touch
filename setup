@@ -9,8 +9,6 @@
 #   - forwards correct coordinates via a uinput virtual touchscreen
 #   - restarts automatically on USB disconnect/reconnect or crash
 
-packageName="victron-mpi5006-touch"
-
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 if [ $scriptAction == 'NONE' ]; then
